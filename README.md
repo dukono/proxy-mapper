@@ -1,3 +1,4 @@
+<img width="1481" height="837" alt="image" src="https://github.com/user-attachments/assets/2be23e3c-53ae-4852-856d-4000b8595f06" />
 # Proxy Monitor
 
 Herramienta de interceptación y manipulación de tráfico HTTP/HTTPS con interfaz web en tiempo real.
