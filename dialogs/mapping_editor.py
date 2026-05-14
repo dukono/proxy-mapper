@@ -302,27 +302,129 @@ class MappingEditorDialog:
         if mapping_type == 'Wire':
             help_content = (
                 "## WireMock Mapping Structure\n\n"
-                "**request** fields: `method`, `urlPath`, `urlPattern`, `queryParameters`, `headers`, `bodyPatterns`\n\n"
-                "**response** fields: `status`, `body`, `bodyFileName`, `headers`, `delayDistribution`\n\n"
-                "### Example\n```json\n"
-                '{\n  "request": { "method": "POST", "urlPath": "/api/login" },\n'
-                '  "response": { "status": 200, "bodyFileName": "responses/login.json" }\n}\n```'
+                "---\n\n"
+                "### 📥 `request` — Matching Options\n\n"
+                "| Field | Type | Description |\n"
+                "|---|---|---|\n"
+                "| `method` | string | HTTP method: `GET`, `POST`, `PUT`, `DELETE`, `PATCH`, `OPTIONS`, `ANY` |\n"
+                "| `urlPath` | string | Exact URL path match, e.g. `/api/users` |\n"
+                "| `urlPattern` | string | Regex URL match, e.g. `/api/users/[0-9]+` |\n"
+                "| `url` | string | Exact full URL match including query string |\n"
+                "| `urlPathPattern` | string | Regex match on path only (ignores query string) |\n\n"
+                "#### `queryParameters` — Query String Matching\n"
+                "```json\n"
+                '"queryParameters": {\n'
+                '  "page": { "equalTo": "1" },\n'
+                '  "search": { "contains": "john" },\n'
+                '  "id": { "matches": "[0-9]+" },\n'
+                '  "token": { "absent": true }\n'
+                '}\n'
+                "```\n\n"
+                "#### `headers` — Request Header Matching\n"
+                "```json\n"
+                '"headers": {\n'
+                '  "Content-Type": { "equalTo": "application/json" },\n'
+                '  "Authorization": { "contains": "Bearer" },\n'
+                '  "X-Custom": { "absent": true }\n'
+                '}\n'
+                "```\n\n"
+                "#### `bodyPatterns` — Request Body Matching\n"
+                "```json\n"
+                '"bodyPatterns": [\n'
+                '  { "equalToJson": {"id": 1}, "ignoreArrayOrder": true },\n'
+                '  { "matchesJsonPath": "$.user.name" },\n'
+                '  { "contains": "someText" },\n'
+                '  { "equalToXml": "<item>value</item>" }\n'
+                ']\n'
+                "```\n\n"
+                "---\n\n"
+                "### 📤 `response` — Response Options\n\n"
+                "| Field | Type | Description |\n"
+                "|---|---|---|\n"
+                "| `status` | int | HTTP status code, e.g. `200`, `201`, `400`, `404`, `500` |\n"
+                "| `body` | string | Inline response body (plain text or JSON string) |\n"
+                "| `bodyFileName` | string | Path to body file relative to `__files/`, e.g. `responses/users.json` |\n"
+                "| `headers` | object | Response headers map, e.g. `{\"Content-Type\": \"application/json\"}` |\n"
+                "| `fixedDelayMilliseconds` | int | Fixed delay in ms before responding, e.g. `500` |\n"
+                "| `fault` | string | Simulate faults: `CONNECTION_RESET_BY_PEER`, `EMPTY_RESPONSE`, `MALFORMED_RESPONSE_CHUNK`, `RANDOM_DATA_THEN_CLOSE` |\n\n"
+                "#### `delayDistribution` — Random Delay\n"
+                "```json\n"
+                '"delayDistribution": {\n'
+                '  "type": "uniform",\n'
+                '  "lower": 100,\n'
+                '  "upper": 500\n'
+                '}\n'
+                "```\n\n"
+                "---\n\n"
+                "### ✅ Full Example\n"
+                "```json\n"
+                '{\n'
+                '  "request": {\n'
+                '    "method": "POST",\n'
+                '    "urlPath": "/api/login",\n'
+                '    "headers": { "Content-Type": { "equalTo": "application/json" } },\n'
+                '    "bodyPatterns": [{ "matchesJsonPath": "$.username" }]\n'
+                '  },\n'
+                '  "response": {\n'
+                '    "status": 200,\n'
+                '    "headers": { "Content-Type": "application/json" },\n'
+                '    "bodyFileName": "responses/login-success.json",\n'
+                '    "fixedDelayMilliseconds": 200\n'
+                '  }\n'
+                '}\n'
+                "```\n"
             )
         else:
             help_content = (
-                "## Custom Mapping Structure\n\n"
-                "**request** fields: `method`, `matchType` (contains/equal/regexp), `matchValue`\n\n"
-                "**response** fields: `status`, `headers`, `body`\n\n"
-                "### Example\n```json\n"
-                '{\n  "request": { "method": "GET", "matchType": "contains", "matchValue": "/api" },\n'
-                '  "response": { "status": 200, "body": "{\\"ok\\": true}" }\n}\n```'
+                "## Custom (Default) Mapping Structure\n\n"
+                "---\n\n"
+                "### 📥 `request` — Matching Options\n\n"
+                "| Field | Type | Description |\n"
+                "|---|---|---|\n"
+                "| `method` | string | HTTP method: `GET`, `POST`, `PUT`, `DELETE`, `PATCH`, `ANY` |\n"
+                "| `matchType` | string | How to match the URL — see values below |\n"
+                "| `matchValue` | string | The value to match against the request URL |\n\n"
+                "#### `matchType` Values\n\n"
+                "| Value | Description | Example |\n"
+                "|---|---|---|\n"
+                "| `contains` | URL contains the string | `/api` matches `/api/users` |\n"
+                "| `equal` | Exact URL match | `/api/users` only matches `/api/users` |\n"
+                "| `regexp` | Regex match on full URL | `/api/users/[0-9]+` |\n"
+                "| `startswith` | URL starts with the string | `/api/v2` |\n\n"
+                "---\n\n"
+                "### 📤 `response` — Response Options\n\n"
+                "| Field | Type | Description |\n"
+                "|---|---|---|\n"
+                "| `status` | int | HTTP status code, e.g. `200`, `201`, `400`, `404`, `500` |\n"
+                "| `body` | string | Inline response body. Can be a plain string or a JSON-encoded string |\n"
+                "| `headers` | object | Response headers, e.g. `{\"Content-Type\": \"application/json\"}` |\n\n"
+                "#### `body` — Inline JSON Example\n"
+                "```json\n"
+                '"body": "{\\"id\\": 1, \\"name\\": \\"John\\"}"\n'
+                "```\n\n"
+                "---\n\n"
+                "### ✅ Full Example\n"
+                "```json\n"
+                '{\n'
+                '  "request": {\n'
+                '    "method": "GET",\n'
+                '    "matchType": "contains",\n'
+                '    "matchValue": "/api/products"\n'
+                '  },\n'
+                '  "response": {\n'
+                '    "status": 200,\n'
+                '    "headers": { "Content-Type": "application/json" },\n'
+                '    "body": "{\\"products\\": [], \\"total\\": 0}"\n'
+                '  }\n'
+                '}\n'
+                "```\n"
             )
 
         with ui.dialog() as help_dialog:
             help_dialog.props('resizable')
-            with ui.card().classes('w-[700px] max-w-[95vw] h-[80vh] bg-gray-800 p-0'):
+            with ui.card().classes('w-[800px] max-w-[95vw] h-[85vh] bg-gray-800 p-0 flex flex-col'):
                 with ui.row().classes('w-full p-3 border-b border-gray-700 items-center justify-between shrink-0'):
-                    ui.label(f"JSON Structure Help - {mapping_type}").classes('text-lg font-bold text-white')
+                    ui.label(f"📖 JSON Structure Help — {mapping_type}").classes('text-lg font-bold text-white')
                     ui.button(icon='close', on_click=help_dialog.close).props('flat round dense color=white').classes('w-8 h-8')
                 with ui.scroll_area().classes('flex-1 w-full min-h-0 p-4'):
                     ui.markdown(help_content).classes('text-gray-300 text-sm prose prose-invert max-w-none')
