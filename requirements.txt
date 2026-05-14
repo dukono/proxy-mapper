@@ -1,0 +1,7 @@
+mitmproxy
+nicegui
+pydantic
+pywebview
+PyQt6
+PyQt6-WebEngine
+qtpy

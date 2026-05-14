@@ -1,0 +1,139 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8"/>
+  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+  <title>Proxy Monitor</title>
+  <style>
+    *{box-sizing:border-box;margin:0;padding:0}
+    body{width:360px;min-height:200px;background:#0f172a;color:#e2e8f0;font-family:'Segoe UI',system-ui,sans-serif;font-size:13px}
+    .header{display:flex;align-items:center;justify-content:space-between;padding:10px 14px 8px;border-bottom:1px solid #1e293b}
+    .header-left{display:flex;align-items:center;gap:8px}
+    .title{font-size:14px;font-weight:700;color:#f8fafc}
+    .status-dot{width:8px;height:8px;border-radius:50%;background:#ef4444;flex-shrink:0}
+    .status-dot.online{background:#22c55e;animation:pulse 2s infinite}
+    @keyframes pulse{0%,100%{opacity:1}50%{opacity:.4}}
+    .status-text{font-size:11px;color:#64748b}
+    .tabs{display:flex;border-bottom:1px solid #1e293b}
+    .tab-btn{flex:1;padding:7px 4px;background:none;border:none;border-bottom:2px solid transparent;color:#64748b;font-size:11px;font-weight:600;letter-spacing:.04em;cursor:pointer;transition:color .15s,border-color .15s}
+    .tab-btn.active{color:#60a5fa;border-bottom-color:#3b82f6}
+    .tab-btn:hover:not(.active){color:#94a3b8}
+    .panel{display:none;padding:10px 12px}
+    .panel.active{display:block}
+    #traffic-list{max-height:260px;overflow-y:auto}
+    .traffic-item{display:flex;align-items:center;gap:6px;padding:4px 6px;border-radius:4px;cursor:pointer;transition:background .1s}
+    .traffic-item:hover{background:#1e293b}
+    .method-badge{font-size:9px;font-weight:700;font-family:monospace;padding:1px 4px;border-radius:3px;flex-shrink:0}
+    .GET{color:#93c5fd;background:rgba(59,130,246,.15)}
+    .POST{color:#86efac;background:rgba(34,197,94,.15)}
+    .PUT{color:#fde047;background:rgba(234,179,8,.15)}
+    .DELETE{color:#fca5a5;background:rgba(239,68,68,.15)}
+    .PATCH{color:#d8b4fe;background:rgba(168,85,247,.15)}
+    .code-badge{font-size:10px;font-family:monospace;font-weight:600;flex-shrink:0;width:28px;text-align:center}
+    .c2xx{color:#4ade80}.c3xx{color:#facc15}.c4xx{color:#fb923c}.c5xx{color:#f87171}
+    .traffic-url{flex:1;font-size:10px;font-family:monospace;color:#94a3b8;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+    .mock-pill{font-size:9px;color:#c084fc;background:rgba(168,85,247,.2);padding:0 4px;border-radius:3px;flex-shrink:0}
+    .duration{font-size:10px;font-family:monospace;color:#475569;flex-shrink:0}
+    .empty{text-align:center;padding:24px 0;color:#475569;font-size:12px}
+    .actions{display:flex;gap:6px;margin-bottom:8px;flex-wrap:wrap}
+    .btn{flex:1;padding:5px 8px;border:none;border-radius:5px;font-size:11px;font-weight:600;cursor:pointer;transition:opacity .15s;display:flex;align-items:center;justify-content:center;gap:4px}
+    .btn:hover{opacity:.85}
+    .btn-primary{background:#2563eb;color:#fff}
+    .btn-red{background:#dc2626;color:#fff}
+    .btn-green{background:#16a34a;color:#fff}
+    .btn-gray{background:#1e293b;color:#94a3b8;border:1px solid #334155}
+    .filter-row{display:flex;gap:6px;margin-bottom:8px}
+    .filter-input{flex:1;background:#1e293b;border:1px solid #334155;border-radius:5px;padding:4px 8px;color:#e2e8f0;font-size:11px;outline:none}
+    .filter-input:focus{border-color:#3b82f6}
+    .setting-row{display:flex;align-items:center;justify-content:space-between;padding:6px 0;border-bottom:1px solid #1e293b}
+    .setting-label{font-size:12px;color:#94a3b8}
+    .input-field{background:#1e293b;border:1px solid #334155;border-radius:4px;padding:3px 7px;color:#e2e8f0;font-size:11px;width:160px;outline:none}
+    .input-field:focus{border-color:#3b82f6}
+    .input-sm{width:60px}
+    .open-app{display:block;text-align:center;padding:8px;font-size:11px;color:#3b82f6;text-decoration:none;border-top:1px solid #1e293b}
+    .open-app:hover{color:#60a5fa}
+    ::-webkit-scrollbar{width:4px}
+    ::-webkit-scrollbar-thumb{background:#334155;border-radius:2px}
+  </style>
+</head>
+<body>
+  <div class="header">
+    <div class="header-left">
+      <svg width="20" height="20" viewBox="0 0 24 24" fill="none">
+        <circle cx="12" cy="12" r="10" stroke="#3b82f6" stroke-width="2"/>
+        <path d="M8 12h8M12 8v8" stroke="#60a5fa" stroke-width="2" stroke-linecap="round"/>
+      </svg>
+      <span class="title">Proxy Monitor</span>
+    </div>
+    <div style="display:flex;align-items:center;gap:6px">
+      <div class="status-dot" id="status-dot"></div>
+      <span class="status-text" id="status-text">Connecting…</span>
+    </div>
+  </div>
+
+  <div class="tabs">
+    <button class="tab-btn active" data-tab="traffic">TRAFFIC</button>
+    <button class="tab-btn" data-tab="actions">ACTIONS</button>
+    <button class="tab-btn" data-tab="settings">SETTINGS</button>
+  </div>
+
+  <!-- TRAFFIC -->
+  <div class="panel active" id="panel-traffic">
+    <div class="filter-row">
+      <input class="filter-input" id="filter-input" placeholder="Filter URL…"/>
+      <button class="btn btn-gray" id="btn-clear" title="Clear traffic">🗑</button>
+      <button class="btn btn-gray" id="btn-refresh" title="Refresh">↺</button>
+    </div>
+    <div id="traffic-list"><div class="empty" id="empty-msg">No traffic yet</div></div>
+  </div>
+
+  <!-- ACTIONS -->
+  <div class="panel" id="panel-actions">
+    <div class="actions">
+      <button class="btn btn-green" id="btn-start">▶ Start proxy</button>
+      <button class="btn btn-red"   id="btn-stop">■ Stop proxy</button>
+    </div>
+    <div class="actions">
+      <button class="btn btn-primary" id="btn-open-monitor">📡 Open Monitor</button>
+      <button class="btn btn-primary" id="btn-open-mappings">🗂 Mappings</button>
+    </div>
+    <div class="actions">
+      <button class="btn btn-gray" id="btn-pause">⏸ Pause capture</button>
+    </div>
+    <div style="margin-top:10px;border-top:1px solid #1e293b;padding-top:10px">
+      <div style="font-size:11px;color:#64748b;margin-bottom:6px">Current page</div>
+      <div class="actions">
+        <button class="btn btn-gray" id="btn-mock-page">✏ Mock this page</button>
+        <button class="btn btn-gray" id="btn-copy-url">📋 Copy URL</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- SETTINGS -->
+  <div class="panel" id="panel-settings">
+    <div class="setting-row">
+      <span class="setting-label">App URL</span>
+      <input class="input-field" id="setting-url" type="text" placeholder="http://localhost:8081"/>
+    </div>
+    <div class="setting-row">
+      <span class="setting-label">Proxy port</span>
+      <input class="input-field" id="setting-port" type="number" placeholder="8080"/>
+    </div>
+    <div class="setting-row">
+      <span class="setting-label">Auto-refresh (sec)</span>
+      <input class="input-field input-sm" id="setting-refresh" type="number" placeholder="2"/>
+    </div>
+    <div style="margin-top:10px">
+      <button class="btn btn-primary" id="btn-save-settings" style="width:100%">Save settings</button>
+    </div>
+    <div style="margin-top:10px;padding-top:10px;border-top:1px solid #1e293b;font-size:10px;color:#475569;line-height:1.6">
+      <b style="color:#64748b">Proxy setup:</b> configure your browser/system to use<br/>
+      <code style="color:#60a5fa">localhost:8080</code> as HTTP/HTTPS proxy
+    </div>
+  </div>
+
+  <a class="open-app" id="link-open-app" href="#" target="_blank">Open Proxy Monitor ↗</a>
+  <script src="popup.js"></script>
+</body>
+</html>
+

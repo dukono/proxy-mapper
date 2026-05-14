@@ -1,0 +1,37 @@
+{
+  "profiles": [
+    {
+      "name": "IT",
+      "root_path": "/home/vitalyneborachok/IdeaProjectsPersonal/wireMock",
+      "description": "",
+      "mapping_type": "Wire",
+      "service_url": "http://localhost:31310",
+      "mappings_path": ""
+    },
+    {
+      "name": "def",
+      "root_path": "/home/vitalyneborachok/IdeaProjectsPersonal/mock",
+      "description": "",
+      "mapping_type": "default",
+      "service_url": "",
+      "mappings_path": ""
+    },
+    {
+      "name": "as",
+      "root_path": "/home/vitalyneborachok/IdeaProjectsPersonal/mock",
+      "description": "",
+      "mapping_type": "default",
+      "service_url": "",
+      "mappings_path": ""
+    },
+    {
+      "name": "test",
+      "root_path": "/home/vitalyneborachok/IdeaProjects/wsc-geret/code/src/test/resources/compose",
+      "description": "",
+      "mapping_type": "Wire",
+      "service_url": "http://localhost:31310",
+      "mappings_path": "/home/vitalyneborachok/IdeaProjects/wsc-geret/code/src/test/resources/compose/trafficparrot_mappings"
+    }
+  ],
+  "current_profile": "test"
+}
