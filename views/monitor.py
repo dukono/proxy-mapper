@@ -87,7 +87,7 @@ class MonitorView:
                             .props('rounded').classes('text-xs font-mono shrink-0 ml-1')
 
                     # Table
-                    self._table_container = ui.row().classes('w-full flex-1')
+                    self._table_container = ui.row().classes('w-full flex-1').style('overflow-y: auto; min-height: 0;')
                     self._refresh_table()
 
             # ── Card 2: request / response details ────────────────────────────

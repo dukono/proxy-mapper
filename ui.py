@@ -27,6 +27,26 @@ class ProxyUIRefactored(ProxyUIBase):
         """Set up the main UI layout."""
         ui.page_title("Proxy Monitor")
         ui.dark_mode().enable()
+        # Global fix: intercept Ctrl+C to avoid navigator.clipboard permission
+        # request that crashes pywebview due to PyQt6 enum type mismatch.
+        ui.add_head_html('''<script>
+        document.addEventListener("keydown", function(e) {
+            if ((e.ctrlKey || e.metaKey) && e.key === "c") {
+                var sel = window.getSelection();
+                if (sel && sel.toString().length > 0) {
+                    e.preventDefault();
+                    var el = document.createElement("textarea");
+                    el.value = sel.toString();
+                    el.style.cssText = "position:fixed;top:0;left:0;opacity:0;";
+                    document.body.appendChild(el);
+                    el.focus();
+                    el.select();
+                    document.execCommand("copy");
+                    document.body.removeChild(el);
+                }
+            }
+        }, true);
+        </script>''')
         ui.add_css('''
             .traffic-row:hover { background-color: #374151 !important; }
             .traffic-row.selected { background-color: #1e40af !important; }

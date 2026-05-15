@@ -11,22 +11,22 @@ ui.add_css('.details-panel * { user-select: text !important; cursor: text; }')
 def _copy_btn(text: str):
     import json as _json
     encoded = _json.dumps(text)
+    # Avoid navigator.clipboard — it triggers a Qt permission dialog in pywebview
+    # that crashes due to a PyQt6 enum type mismatch. Use execCommand fallback only.
     js = (
         "(function(){"
         f"  var t={encoded};"
-        "  if(navigator.clipboard&&window.isSecureContext){"
-        "    navigator.clipboard.writeText(t).catch(function(){"
-        "      _fallbackCopy(t);"
-        "    });"
-        "  } else { _fallbackCopy(t); }"
-        "  function _fallbackCopy(s){"
-        "    var el=document.createElement('textarea');"
-        "    el.value=s; el.style.position='fixed'; el.style.opacity='0';"
-        "    document.body.appendChild(el); el.focus(); el.select();"
-        "    document.execCommand('copy');"
-        "    document.body.removeChild(el);"
-        "  }"
-        "  return true;"
+        "  var el=document.createElement('textarea');"
+        "  el.value=t;"
+        "  el.style.position='fixed';"
+        "  el.style.top='0';"
+        "  el.style.left='0';"
+        "  el.style.opacity='0';"
+        "  document.body.appendChild(el);"
+        "  el.focus();"
+        "  el.select();"
+        "  document.execCommand('copy');"
+        "  document.body.removeChild(el);"
         "})()"
     )
     async def do_copy():

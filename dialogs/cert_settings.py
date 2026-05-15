@@ -19,6 +19,18 @@ DEFAULT_JAVA_CACERTS = str(Path.home() / ".asdf/installs/ivm-java/openjdk-21.0.1
 DEFAULT_JAVA_CACERTS_PASSWORD = "changeit"
 CERT_ALIAS = "mitmproxy"
 
+SYSTEM_CA_DIR_DEBIAN = Path("/usr/local/share/ca-certificates")
+SYSTEM_CA_DIR_FEDORA = Path("/etc/pki/ca-trust/source/anchors")
+SYSTEM_CA_DEST_DEBIAN = SYSTEM_CA_DIR_DEBIAN / "mitmproxy-ca.crt"
+SYSTEM_CA_DEST_FEDORA = SYSTEM_CA_DIR_FEDORA / "mitmproxy-ca.crt"
+
+
+def _detect_system_ca() -> tuple[Path, str]:
+    """Return (dest_path, update_command) for the current distro."""
+    if SYSTEM_CA_DIR_FEDORA.exists():
+        return SYSTEM_CA_DEST_FEDORA, "update-ca-trust"
+    return SYSTEM_CA_DEST_DEBIAN, "update-ca-certificates"
+
 
 class CertSettingsDialog:
     """Dialog for mitmproxy certificate management."""
@@ -111,6 +123,26 @@ class CertSettingsDialog:
                                 ui.button('📁 Open folder', on_click=lambda: self._open_folder(str(MITMPROXY_CERT_DIR))) \
                                     .props('flat dense no-caps size=sm').classes('text-gray-300 hover:text-white')
 
+                        # ── Section: Install in System CA store ───────────────
+                        with ui.card().classes('w-full bg-gray-700/50 border border-gray-600 p-3'):
+                            ui.label('Install in System CA Store (Linux)').classes('text-sm font-bold text-orange-300 mb-2')
+                            ui.label(
+                                'Installs the mitmproxy CA cert into the OS trusted CA store so that all system '
+                                'applications (curl, wget, browsers, etc.) trust the proxy certificate. '
+                                'Requires sudo/root privileges.'
+                            ).classes('text-xs text-gray-400 mb-3')
+
+                            dest, cmd = _detect_system_ca()
+                            ui.label(f'Destination: {dest}').classes('text-xs text-gray-500 mb-2 font-mono')
+
+                            with ui.row().classes('gap-2 flex-wrap'):
+                                ui.button('Install in System', icon='shield', on_click=self._install_in_system) \
+                                    .props('dense no-caps').classes('bg-orange-700 text-white hover:bg-orange-600 px-3')
+                                ui.button('Check if installed', icon='search', on_click=self._check_system_cert) \
+                                    .props('flat dense no-caps').classes('text-gray-300 hover:text-white border border-gray-600')
+                                ui.button('Remove from System', icon='delete', on_click=self._remove_from_system) \
+                                    .props('flat dense no-caps').classes('text-red-400 hover:text-red-300 border border-gray-600')
+
                         # ── Section: Export certificate ───────────────────────
                         with ui.card().classes('w-full bg-gray-700/50 border border-gray-600 p-3'):
                             ui.label('Export Certificate').classes('text-sm font-bold text-blue-300 mb-2')
@@ -148,6 +180,39 @@ class CertSettingsDialog:
                                           on_click=self._remove_from_java) \
                                     .props('flat dense no-caps').classes('text-red-400 hover:text-red-300 border border-gray-600')
 
+                        # ── Section: Install in Browser NSS (Firefox/Chrome) ──
+                        with ui.card().classes('w-full bg-gray-700/50 border border-gray-600 p-3'):
+                            ui.label('Install in Browser (Firefox / Chrome)').classes('text-sm font-bold text-purple-300 mb-2')
+                            ui.label(
+                                'Installs the mitmproxy CA cert into Firefox and Chrome/Chromium NSS databases '
+                                'so those browsers trust the proxy certificate. Uses certutil (nss-tools). '
+                                'Does NOT require sudo.'
+                            ).classes('text-xs text-gray-400 mb-3')
+
+                            with ui.row().classes('gap-2 flex-wrap'):
+                                ui.button('Install in Firefox', icon='web', on_click=self._install_in_firefox) \
+                                    .props('dense no-caps').classes('bg-purple-700 text-white hover:bg-purple-600 px-3')
+                                ui.button('Install in Chrome', icon='web_asset', on_click=self._install_in_chrome) \
+                                    .props('dense no-caps').classes('bg-indigo-700 text-white hover:bg-indigo-600 px-3')
+                                ui.button('Remove from Firefox', icon='delete', on_click=self._remove_from_firefox) \
+                                    .props('flat dense no-caps').classes('text-red-400 hover:text-red-300 border border-gray-600')
+                                ui.button('Remove from Chrome', icon='delete', on_click=self._remove_from_chrome) \
+                                    .props('flat dense no-caps').classes('text-red-400 hover:text-red-300 border border-gray-600')
+
+                        # ── Section: User-level trust (no sudo) ───────────────
+                        with ui.card().classes('w-full bg-gray-700/50 border border-gray-600 p-3'):
+                            ui.label('User-level Trust (no sudo)').classes('text-sm font-bold text-teal-300 mb-2')
+                            ui.label(
+                                'Installs the certificate using "trust anchor" (p11-kit) at user level. '
+                                'No sudo needed. Effective for applications that use the GnuTLS/NSS stack.'
+                            ).classes('text-xs text-gray-400 mb-3')
+
+                            with ui.row().classes('gap-2 flex-wrap'):
+                                ui.button('Add user trust', icon='person_add', on_click=self._add_user_trust) \
+                                    .props('dense no-caps').classes('bg-teal-700 text-white hover:bg-teal-600 px-3')
+                                ui.button('Remove user trust', icon='person_remove', on_click=self._remove_user_trust) \
+                                    .props('flat dense no-caps').classes('text-red-400 hover:text-red-300 border border-gray-600')
+
                         # ── Output console ────────────────────────────────────
                         with ui.card().classes('w-full bg-gray-900 border border-gray-700 p-3'):
                             ui.label('Output').classes('text-xs font-bold text-gray-400 mb-2')
@@ -157,6 +222,99 @@ class CertSettingsDialog:
         self.dialog.open()
         # Refresh status after dialog is built
         self._refresh_cert_status()
+
+    # ── System CA helpers ─────────────────────────────────────────────────────
+
+    def _install_in_system(self):
+        if not MITMPROXY_CA_CERT.exists():
+            self._set_output('❌ mitmproxy cert not found. Start the proxy first.', 'text-red-400')
+            return
+
+        dest, update_cmd = _detect_system_ca()
+        self._set_output('⏳ Installing certificate in system CA store (requires sudo)...', 'text-yellow-400')
+
+        try:
+            # Copy cert file with sudo
+            cp_result = subprocess.run(
+                ['sudo', 'cp', str(MITMPROXY_CA_CERT), str(dest)],
+                capture_output=True, text=True
+            )
+            if cp_result.returncode != 0:
+                self._set_output(
+                    f'❌ Failed to copy cert (sudo cp):\n{(cp_result.stdout + cp_result.stderr).strip()}',
+                    'text-red-400'
+                )
+                return
+
+            # Update the CA trust store
+            upd_result = subprocess.run(
+                ['sudo', update_cmd],
+                capture_output=True, text=True
+            )
+            if upd_result.returncode == 0:
+                self._set_output(
+                    f'✅ Certificate installed in system CA store!\nDest: {dest}\nCommand: sudo {update_cmd}',
+                    'text-green-400'
+                )
+                ui.notify('Certificate installed in system CA store', type='positive')
+            else:
+                self._set_output(
+                    f'⚠️ Cert copied but update failed:\n{(upd_result.stdout + upd_result.stderr).strip()}',
+                    'text-yellow-400'
+                )
+        except FileNotFoundError:
+            self._set_output(
+                '❌ sudo not found or not available in this environment.',
+                'text-red-400'
+            )
+        except Exception as e:
+            self._set_output(f'❌ Error: {e}', 'text-red-400')
+            log.error("System CA install error: %s", e)
+
+    def _check_system_cert(self):
+        dest, _ = _detect_system_ca()
+        if dest.exists():
+            self._set_output(f'✅ Certificate IS installed at:\n{dest}', 'text-green-400')
+        else:
+            self._set_output(f'⚠️ Certificate NOT found at:\n{dest}', 'text-yellow-400')
+
+    def _remove_from_system(self):
+        dest, update_cmd = _detect_system_ca()
+        if not dest.exists():
+            self._set_output(f'⚠️ Certificate not found at:\n{dest}', 'text-yellow-400')
+            return
+
+        self._set_output('⏳ Removing certificate from system CA store (requires sudo)...', 'text-yellow-400')
+        try:
+            rm_result = subprocess.run(
+                ['sudo', 'rm', '-f', str(dest)],
+                capture_output=True, text=True
+            )
+            if rm_result.returncode != 0:
+                self._set_output(
+                    f'❌ Failed to remove cert:\n{(rm_result.stdout + rm_result.stderr).strip()}',
+                    'text-red-400'
+                )
+                return
+
+            upd_result = subprocess.run(
+                ['sudo', update_cmd],
+                capture_output=True, text=True
+            )
+            if upd_result.returncode == 0:
+                self._set_output(
+                    f'✅ Certificate removed from system CA store.\nCommand: sudo {update_cmd}',
+                    'text-green-400'
+                )
+                ui.notify('Certificate removed from system CA store', type='positive')
+            else:
+                self._set_output(
+                    f'⚠️ File removed but update failed:\n{(upd_result.stdout + upd_result.stderr).strip()}',
+                    'text-yellow-400'
+                )
+        except Exception as e:
+            self._set_output(f'❌ Error: {e}', 'text-red-400')
+            log.error("System CA remove error: %s", e)
 
     # ── Helpers ───────────────────────────────────────────────────────────────
 
@@ -201,6 +359,7 @@ class CertSettingsDialog:
             if not dest_dir.exists():
                 dest_dir = Path.home()
 
+            dest = None
             if fmt == 'pem':
                 dest = dest_dir / "mitmproxy-ca-cert.pem"
                 shutil.copy2(MITMPROXY_CA_CERT, dest)
@@ -230,7 +389,8 @@ class CertSettingsDialog:
                 else:
                     self._set_output('❌ .p12 file not found in ~/.mitmproxy', 'text-red-400')
 
-            ui.notify(f'Exported {fmt.upper()} to {dest}', type='positive')
+            if dest is not None:
+                ui.notify(f'Exported {fmt.upper()} to {dest}', type='positive')
 
         except Exception as e:
             self._set_output(f'❌ Export error: {e}', 'text-red-400')
@@ -330,3 +490,163 @@ class CertSettingsDialog:
             output = (out + err).strip()
             self._set_output(f'❌ keytool error (exit {rc}):\n{output}', 'text-red-400')
             ui.notify('Failed to remove certificate', type='negative')
+
+    # ── Browser NSS helpers ───────────────────────────────────────────────────
+
+    def _find_nss_dbs(self, profile_glob: str) -> list[Path]:
+        """Return list of existing NSS db directories matching a glob pattern."""
+        import glob as _glob
+        paths = []
+        for p in _glob.glob(profile_glob):
+            candidate = Path(p)
+            if (candidate / "cert9.db").exists() or (candidate / "cert8.db").exists():
+                paths.append(candidate)
+        return paths
+
+    def _certutil_available(self) -> bool:
+        return shutil.which("certutil") is not None
+
+    def _run_certutil(self, db_dir: Path, action: str) -> tuple[int, str]:
+        """Run certutil import or delete on a single NSS db. Returns (rc, output)."""
+        if action == "add":
+            cmd = [
+                "certutil", "-A",
+                "-d", f"sql:{db_dir}",
+                "-n", CERT_ALIAS,
+                "-t", "CT,,",
+                "-i", str(MITMPROXY_CA_CERT),
+            ]
+        else:
+            cmd = [
+                "certutil", "-D",
+                "-d", f"sql:{db_dir}",
+                "-n", CERT_ALIAS,
+            ]
+        result = subprocess.run(cmd, capture_output=True, text=True)
+        return result.returncode, (result.stdout + result.stderr).strip()
+
+    def _install_cert_in_nss_dbs(self, dbs: list[Path], browser: str):
+        if not MITMPROXY_CA_CERT.exists():
+            self._set_output('❌ mitmproxy cert not found. Start the proxy first.', 'text-red-400')
+            return
+        if not self._certutil_available():
+            self._set_output(
+                '❌ certutil not found.\nInstall it with:\n  sudo apt install libnss3-tools\n  # or: sudo dnf install nss-tools',
+                'text-red-400'
+            )
+            return
+        if not dbs:
+            self._set_output(f'⚠️ No {browser} NSS databases found.', 'text-yellow-400')
+            return
+
+        results = []
+        ok = 0
+        for db in dbs:
+            rc, out = self._run_certutil(db, "add")
+            if rc == 0:
+                results.append(f'  ✅ {db}')
+                ok += 1
+            else:
+                results.append(f'  ❌ {db}\n     {out}')
+
+        summary = f'Installed in {ok}/{len(dbs)} {browser} NSS db(s):\n' + '\n'.join(results)
+        color = 'text-green-400' if ok == len(dbs) else 'text-yellow-400'
+        self._set_output(summary, color)
+        if ok:
+            ui.notify(f'Certificate installed in {ok} {browser} profile(s)', type='positive')
+
+    def _remove_cert_from_nss_dbs(self, dbs: list[Path], browser: str):
+        if not self._certutil_available():
+            self._set_output('❌ certutil not found.', 'text-red-400')
+            return
+        if not dbs:
+            self._set_output(f'⚠️ No {browser} NSS databases found.', 'text-yellow-400')
+            return
+
+        results = []
+        ok = 0
+        for db in dbs:
+            rc, out = self._run_certutil(db, "delete")
+            if rc == 0:
+                results.append(f'  ✅ {db}')
+                ok += 1
+            else:
+                results.append(f'  ⚠️ {db}\n     {out}')
+
+        summary = f'Removed from {ok}/{len(dbs)} {browser} NSS db(s):\n' + '\n'.join(results)
+        self._set_output(summary, 'text-green-400' if ok else 'text-yellow-400')
+
+    def _install_in_firefox(self):
+        home = Path.home()
+        dbs = self._find_nss_dbs(str(home / ".mozilla/firefox/*.default*")) + \
+              self._find_nss_dbs(str(home / ".mozilla/firefox/*.esr"))
+        self._install_cert_in_nss_dbs(dbs, "Firefox")
+
+    def _remove_from_firefox(self):
+        home = Path.home()
+        dbs = self._find_nss_dbs(str(home / ".mozilla/firefox/*.default*")) + \
+              self._find_nss_dbs(str(home / ".mozilla/firefox/*.esr"))
+        self._remove_cert_from_nss_dbs(dbs, "Firefox")
+
+    def _install_in_chrome(self):
+        home = Path.home()
+        dbs = self._find_nss_dbs(str(home / ".pki/nssdb")) + \
+              self._find_nss_dbs(str(home / "snap/chromium/current/.pki/nssdb"))
+        # Chrome uses a flat dir, not a glob
+        flat = home / ".pki/nssdb"
+        if flat.exists() and flat not in dbs:
+            dbs.append(flat)
+        self._install_cert_in_nss_dbs(dbs, "Chrome/Chromium")
+
+    def _remove_from_chrome(self):
+        home = Path.home()
+        dbs = self._find_nss_dbs(str(home / ".pki/nssdb")) + \
+              self._find_nss_dbs(str(home / "snap/chromium/current/.pki/nssdb"))
+        flat = home / ".pki/nssdb"
+        if flat.exists() and flat not in dbs:
+            dbs.append(flat)
+        self._remove_cert_from_nss_dbs(dbs, "Chrome/Chromium")
+
+    # ── User-level trust (p11-kit) ────────────────────────────────────────────
+
+    def _add_user_trust(self):
+        if not MITMPROXY_CA_CERT.exists():
+            self._set_output('❌ mitmproxy cert not found. Start the proxy first.', 'text-red-400')
+            return
+        if not shutil.which("trust"):
+            self._set_output(
+                '❌ "trust" command not found.\nInstall p11-kit:\n  sudo apt install p11-kit\n  # or: sudo dnf install p11-kit',
+                'text-red-400'
+            )
+            return
+        result = subprocess.run(
+            ["trust", "anchor", "--store", str(MITMPROXY_CA_CERT)],
+            capture_output=True, text=True
+        )
+        if result.returncode == 0:
+            self._set_output('✅ Certificate added to user trust store via p11-kit.', 'text-green-400')
+            ui.notify('User trust anchor added', type='positive')
+        else:
+            self._set_output(
+                f'❌ trust anchor failed:\n{(result.stdout + result.stderr).strip()}',
+                'text-red-400'
+            )
+
+    def _remove_user_trust(self):
+        if not shutil.which("trust"):
+            self._set_output('❌ "trust" command not found.', 'text-red-400')
+            return
+        result = subprocess.run(
+            ["trust", "anchor", "--remove", str(MITMPROXY_CA_CERT)],
+            capture_output=True, text=True
+        )
+        if result.returncode == 0:
+            self._set_output('✅ Certificate removed from user trust store.', 'text-green-400')
+            ui.notify('User trust anchor removed', type='positive')
+        else:
+            self._set_output(
+                f'❌ trust remove failed:\n{(result.stdout + result.stderr).strip()}',
+                'text-red-400'
+            )
+
+    # ── existing helpers ──────────────────────────────────────────────────────

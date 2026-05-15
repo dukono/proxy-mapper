@@ -222,11 +222,21 @@ class TrafficTable:
         self._entries    = entries
         self._rows_cache = [_build_row(i, e) for i, e in enumerate(entries[:500])]
 
-        # Restore pre-selection
         pre_selected = [r for r in self._rows_cache if r['entry_id'] in self._selection_ids] \
                        if self._selection_ids else \
                        [r for r in self._rows_cache if r['entry_id'] == self._selected_entry_id]
 
+        # ── If table already exists just update rows (avoids destroying open dialogs) ──
+        if self._table is not None:
+            try:
+                self._table.rows = self._rows_cache
+                if pre_selected:
+                    self._table.selected = pre_selected
+                return
+            except Exception:
+                self._table = None   # stale reference — fall through to full rebuild
+
+        # ── Full build (first render or after container.clear()) ──────────────
         container.clear()
         with container:
             table = ui.table(
@@ -234,7 +244,7 @@ class TrafficTable:
                 rows=self._rows_cache,
                 row_key='entry_id',
                 selection='single',
-            ).classes('w-full h-full bg-gray-900 text-gray-300').props(
+            ).classes('w-full bg-gray-900 text-gray-300').props(
                 'dense flat bordered hide-selected-banner'
             ).style('font-size:12px;')
             table.props('table-class="bg-gray-900"')

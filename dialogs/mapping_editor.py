@@ -211,6 +211,27 @@ class MappingEditorDialog:
                 '    min-height: 24px !important; height: 24px !important;'
                 '}'
             )
+            # Intercept Ctrl+C inside the dialog to avoid navigator.clipboard
+            # permission request that crashes pywebview (PyQt6 enum mismatch).
+            ui.add_head_html('''<script>
+            document.addEventListener("keydown", function(e) {
+                if ((e.ctrlKey || e.metaKey) && e.key === "c") {
+                    var sel = window.getSelection();
+                    if (sel && sel.toString().length > 0) {
+                        e.preventDefault();
+                        var text = sel.toString();
+                        var el = document.createElement("textarea");
+                        el.value = text;
+                        el.style.cssText = "position:fixed;top:0;left:0;opacity:0;";
+                        document.body.appendChild(el);
+                        el.focus(); el.select();
+                        document.execCommand("copy");
+                        document.body.removeChild(el);
+                    }
+                }
+            }, true);
+            </script>''')
+
             self.dialog.classes('mapping-editor-dialog')
             card_style = 'width:92vw; height:90vh;' if is_wire else 'width:70vw; height:90vh;'
 
