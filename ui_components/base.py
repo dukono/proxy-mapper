@@ -110,15 +110,28 @@ class ProxyUIBase:
 
     def _auto_load_mappings(self):
         """Reload all mappings from the current profile directory."""
+        import threading
         from config.globals import is_mappings_loaded, set_mappings_loaded
         if is_mappings_loaded():
-            return  # already loaded by another client instance — skip
+            self.refresh_mappings()
+            return
         try:
             count = self.mapping_loader.load_all()
             if count == 0:
                 log.warning("No mappings loaded (directory empty or not found)")
             else:
-                set_mappings_loaded(True)  # mark so other clients don't reload
+                set_mappings_loaded(True)
+            self.refresh_mappings()
+            # Pre-compute conflict detection in background so it's ready when tab opens
+            if hasattr(self, 'mappings_view'):
+                mv = self.mappings_view
+                def _bg():
+                    try:
+                        mv._conflict_cache = None
+                        mv._get_conflicts()
+                    except Exception:
+                        pass
+                threading.Thread(target=_bg, daemon=True).start()
         except Exception as e:
             log.error("Error auto-loading mappings: %s", e)
 

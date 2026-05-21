@@ -158,6 +158,11 @@ class DetailsPanel:
                             .classes('text-xs font-bold') \
                             .style('background:rgba(168,85,247,0.2); color:#c084fc; padding:1px 8px; border-radius:4px; border:1px solid rgba(168,85,247,0.4);') \
                             .tooltip('Edit mapping')
+                        n_conflicts = self._count_conflicts_for_entry(entry)
+                        if n_conflicts:
+                            ui.icon('warning_amber', size='16px') \
+                                .classes('text-yellow-400') \
+                                .tooltip(f'⚠ {n_conflicts} conflicto(s) detectado(s) para este mapping')
                 else:
                     with ui.row().classes('items-center gap-2 flex-1'):
                         ui.html('<span style="display:inline-block;width:10px;height:10px;border-radius:50%;border:2px solid #60a5fa;border-top-color:transparent;animation:spin .8s linear infinite;"></span>')
@@ -179,48 +184,80 @@ class DetailsPanel:
                             msg = "Pending…" if not entry.response else "No body content"
                             _render_body(content, empty_msg=msg)
 
+    def _count_conflicts_for_entry(self, entry) -> int:
+        """Number of conflicting mappings for the given traffic entry."""
+        import os
+        if not self._ui or not hasattr(self._ui, 'mapping_loader'):
+            return 0
+        fi = self._ui.mapping_loader.file_info
+        if not fi:
+            return 0
+        mapping_file_abs = getattr(entry, 'mapping_file', None)
+        if not mapping_file_abs:
+            return 0
+        try:
+            from config import get_global_config
+            mappings_dir = get_global_config().get_mappings_dir()
+            rel = os.path.relpath(mapping_file_abs, mappings_dir)
+        except Exception:
+            return 0
+        rule_id = None
+        for rid, info in fi.items():
+            if info.get('request_file') == rel:
+                rule_id = rid
+                break
+        if not rule_id:
+            return 0
+        if hasattr(self._ui, 'mappings_view') and getattr(self._ui.mappings_view, '_conflict_cache', None):
+            pairs = self._ui.mappings_view._conflict_cache.get('pairs', [])
+        else:
+            try:
+                from views.mappings import detect_conflicts
+                pairs = detect_conflicts(fi)
+            except Exception:
+                return 0
+        return sum(1 for a, b in pairs if a == rule_id or b == rule_id)
+
     def _open_mock_editor(self, entry):
         """Open MappingEditorDialog for the mapping that served this entry."""
+        import os
         from dialogs.mapping_editor import MappingEditorDialog
-        from pathlib import Path
-        import json as _json
+        from config import get_global_config
 
-        if not self._ui:
+        if not self._ui or not hasattr(self._ui, 'mapping_loader'):
             return
 
-        # Try to find the rule that matched this entry
-        rule_id    = getattr(entry, 'rule_id', None)
-        source_file = getattr(entry, 'mapping_file', None) or getattr(entry, 'source_file', None)
+        entry_rule_id = getattr(entry, 'rule_id', None)
+        # mapping_file is an absolute path; file_info stores relative paths
+        mapping_file_abs = getattr(entry, 'mapping_file', None)
+        fi = self._ui.mapping_loader.file_info
 
-        mapping_data = None
-
-        # Primary: load from source_file
-        if source_file:
-            mappings_dir = self._ui.config.get_mappings_dir()
-            full_path = Path(mappings_dir) / source_file
+        # Convert absolute mapping_file to relative (to mappings_dir) for lookup
+        rel_source = None
+        if mapping_file_abs:
             try:
-                content = _json.loads(full_path.read_text())
-                response = content.get('response', {})
-                body_file = response.get('bodyFileName', '')
-                profile = self._ui.config.get_current_profile()
-                mapping_type = profile.mapping_type if profile else 'default'
-                mapping_data = {
-                    'request_file':  source_file,
-                    'response_file': body_file,
-                    'full_json':     _json.dumps(content, indent=2),
-                    'mapping_type':  mapping_type,
-                }
+                mappings_dir = get_global_config().get_mappings_dir()
+                rel_source = os.path.relpath(mapping_file_abs, mappings_dir)
             except Exception:
-                pass
+                rel_source = mapping_file_abs
 
-        # Fallback: look up in mapping_loader file_info
-        if mapping_data is None and rule_id and hasattr(self._ui, 'mapping_loader'):
-            mapping_data = self._ui.mapping_loader.file_info.get(rule_id)
+        # Resolve current rule_id: entry.rule_id may be stale if mappings were
+        # reloaded after the request was captured (rules get new IDs on each load).
+        rule_id = None
+        if entry_rule_id and entry_rule_id in fi:
+            rule_id = entry_rule_id
+        elif rel_source:
+            for rid, info in fi.items():
+                if info.get('request_file') == rel_source:
+                    rule_id = rid
+                    break
 
-        if mapping_data and rule_id:
+        if not rule_id:
+            ui.notify("Mapping file not found", type='negative')
+            return
+
+        mapping_data = fi.get(rule_id)
+        if mapping_data:
             MappingEditorDialog(self._ui).show_edit(rule_id, mapping_data)
-        elif mapping_data:
-            # No rule_id but we have the file — open in create mode pre-filled
-            MappingEditorDialog(self._ui).show_create(mapping_data)
         else:
             ui.notify("Mapping file not found", type='negative')

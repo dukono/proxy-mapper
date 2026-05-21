@@ -83,11 +83,23 @@ ROW_SLOT = r'''
         {{ props.row.path }}
       </span>
       <span v-if="props.row.type_class === 'mocked'"
-            style="font-size:9px; color:#c084fc; background:rgba(168,85,247,0.15); padding:0 3px; border-radius:2px; flex-shrink:0; cursor:default;">
-        {{ props.row.mock_label }}
+            :style="{
+              fontSize:'9px',
+              color:      props.row.has_conflict ? '#fbbf24' : '#c084fc',
+              background: props.row.has_conflict ? 'rgba(245,158,11,0.22)' : 'rgba(168,85,247,0.15)',
+              border:     props.row.has_conflict ? '1px solid rgba(245,158,11,0.5)' : '1px solid transparent',
+              padding:'0 4px', borderRadius:'3px', flexShrink:0, cursor:'default',
+              fontWeight: props.row.has_conflict ? '700' : '400'
+            }">
+        <span v-if="props.row.has_conflict" style="margin-right:2px;">⚠</span>{{ props.row.mock_label }}
         <q-tooltip v-if="props.row.mapping_file" anchor="top middle" self="bottom middle"
-                   style="font-size:10px; font-family:monospace; background:#1e1b4b; color:#c4b5fd; padding:4px 8px; border-radius:4px; max-width:600px; word-break:break-all;">
-          {{ props.row.mapping_file }}
+                   :style="{
+                     fontSize:'10px', fontFamily:'monospace', padding:'4px 8px',
+                     borderRadius:'4px', maxWidth:'600px', wordBreak:'break-all',
+                     background: props.row.has_conflict ? '#2d1a00' : '#1e1b4b',
+                     color:      props.row.has_conflict ? '#fcd34d' : '#c4b5fd'
+                   }">
+          <span v-if="props.row.has_conflict">⚠ Tiene conflictos&#10;</span>{{ props.row.mapping_file }}
         </q-tooltip>
       </span>
     </div>
@@ -142,12 +154,19 @@ def _duration_ms(entry) -> float:
     return -1
 
 
-def _build_row(idx: int, entry) -> dict:
+def _build_row(idx: int, entry, conflicting_files: set = None) -> dict:
+    import os as _os
     is_pending = entry.response is None
     is_mocked  = entry.operation_type in ('redirect', 'mock')
     url        = entry.original_url or entry.request.url
     host, path = _parse_url(url)
     dur_ms     = _duration_ms(entry)
+
+    mapping_file_abs = getattr(entry, 'mapping_file', None) or ''
+    has_conflict = (
+        is_mocked and bool(conflicting_files) and bool(mapping_file_abs)
+        and _os.path.normpath(mapping_file_abs) in conflicting_files
+    )
 
     if is_pending:
         status_class = 'pending'
@@ -191,7 +210,8 @@ def _build_row(idx: int, entry) -> dict:
         'status':     '',           # kept for compat
         'status_class': status_class,
         'mock_label':   mock_label,
-        'mapping_file': getattr(entry, 'mapping_file', None) or '',
+        'mapping_file': mapping_file_abs,
+        'has_conflict': has_conflict,
     }
 
 
@@ -218,9 +238,9 @@ class TrafficTable:
         """Create the keyboard handler — call once from MonitorView.setup()."""
         self._keyboard = ui.keyboard(on_key=self._handle_key, ignore=[])
 
-    def render(self, container, entries: list):
+    def render(self, container, entries: list, conflicting_files: set = None):
         self._entries    = entries
-        self._rows_cache = [_build_row(i, e) for i, e in enumerate(entries[:500])]
+        self._rows_cache = [_build_row(i, e, conflicting_files) for i, e in enumerate(entries[:500])]
 
         pre_selected = [r for r in self._rows_cache if r['entry_id'] in self._selection_ids] \
                        if self._selection_ids else \

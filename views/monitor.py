@@ -109,9 +109,36 @@ class MonitorView:
 
     # ── private ───────────────────────────────────────────────────────────────
 
+    def _get_conflicting_files(self) -> set:
+        """Set of normalised absolute paths involved in at least one conflict (cache only)."""
+        import os
+        if not hasattr(self.ui, 'mapping_loader'):
+            return set()
+        fi = self.ui.mapping_loader.file_info
+        if not fi:
+            return set()
+        # Only use the pre-computed cache — never trigger full detection on every poll tick
+        if not (hasattr(self.ui, 'mappings_view') and
+                getattr(self.ui.mappings_view, '_conflict_cache', None)):
+            return set()
+        pairs = self.ui.mappings_view._conflict_cache.get('pairs', [])
+        if not pairs:
+            return set()
+        conflict_ids = {rid for pair in pairs for rid in pair}
+        try:
+            mappings_dir = self.ui.config.get_mappings_dir()
+        except Exception:
+            return set()
+        result = set()
+        for rid in conflict_ids:
+            rf = fi.get(rid, {}).get('request_file', '')
+            if rf:
+                result.add(os.path.normpath(os.path.join(mappings_dir, rf)))
+        return result
+
     def _refresh_table(self):
         filtered = self._filter.filter(self.ui.traffic)
-        self._table.render(self._table_container, filtered)
+        self._table.render(self._table_container, filtered, self._get_conflicting_files())
 
         # Update counter
         if self._counter_label:

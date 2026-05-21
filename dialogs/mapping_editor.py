@@ -64,6 +64,14 @@ class MappingEditorDialog:
         self._original_body_filename: Optional[str] = None
         self._request_json_data = {}
         self._response_json_data = {}
+        # Footer tab state
+        self._active_footer_tab: Optional[str] = None
+        self._footer_panel = None
+        self._footer_info_content = None
+        self._footer_conflicts_content = None
+        self._footer_conflicts_container = None
+        self._btn_footer_info = None
+        self._btn_footer_conflicts = None
 
     def show_create(self, mapping_data: Optional[dict] = None):
         """Show dialog for creating a new mapping."""
@@ -212,27 +220,6 @@ class MappingEditorDialog:
                 '    min-height: 24px !important; height: 24px !important;'
                 '}'
             )
-            # Intercept Ctrl+C inside the dialog to avoid navigator.clipboard
-            # permission request that crashes pywebview (PyQt6 enum mismatch).
-            ui.add_head_html('''<script>
-            document.addEventListener("keydown", function(e) {
-                if ((e.ctrlKey || e.metaKey) && e.key === "c") {
-                    var sel = window.getSelection();
-                    if (sel && sel.toString().length > 0) {
-                        e.preventDefault();
-                        var text = sel.toString();
-                        var el = document.createElement("textarea");
-                        el.value = text;
-                        el.style.cssText = "position:fixed;top:0;left:0;opacity:0;";
-                        document.body.appendChild(el);
-                        el.focus(); el.select();
-                        document.execCommand("copy");
-                        document.body.removeChild(el);
-                    }
-                }
-            }, true);
-            </script>''')
-
             self.dialog.classes('mapping-editor-dialog')
             card_style = 'width:92vw; height:90vh;' if is_wire else 'width:70vw; height:90vh;'
 
@@ -280,12 +267,38 @@ class MappingEditorDialog:
                                 ).classes('w-full h-full')
 
                 # Footer
-                with ui.row().classes('w-full px-3 py-2 border-t border-gray-700 items-center shrink-0 bg-gray-800'):
-                    with ui.row().classes('items-center gap-2 flex-1'):
-                        ui.label(title).classes('text-sm font-bold text-white')
-                        ui.label(f"({mapping_type} format)").classes('text-xs text-gray-500')
-                        ui.button(icon='help', on_click=lambda: self._show_help_dialog(mapping_type)).props('flat round dense color=cyan size=xs').tooltip('Show JSON structure help')
-                    with ui.row().classes('items-center gap-2'):
+                with ui.column().classes('w-full shrink-0 border-t border-gray-700 bg-gray-800 gap-0'):
+                    # Expandable panel (Info or Conflicts content)
+                    self._footer_panel = ui.column().classes('w-full max-h-48 overflow-auto border-b border-gray-700 gap-0').style('display:none;')
+                    with self._footer_panel:
+                        self._footer_info_content = ui.row().classes('w-full items-center gap-3 px-3 py-2')
+                        with self._footer_info_content:
+                            ui.label(title).classes('text-sm font-bold text-white')
+                            ui.label(f"({mapping_type} format)").classes('text-xs text-gray-500')
+                            ui.button(icon='help', on_click=lambda: self._show_help_dialog(mapping_type)) \
+                                .props('flat round dense color=cyan size=xs').tooltip('Show JSON structure help')
+                        self._footer_conflicts_content = ui.column().classes('w-full px-3 py-2 gap-1').style('display:none;')
+                        with self._footer_conflicts_content:
+                            self._footer_conflicts_container = ui.column().classes('w-full gap-0.5')
+
+                    # Tab bar row + action buttons
+                    with ui.row().classes('w-full px-3 py-1 items-center gap-1'):
+                        self._btn_footer_info = (
+                            ui.button('Info', on_click=lambda: self._toggle_footer_tab('info'))
+                            .props('flat dense no-caps size=sm')
+                            .classes('text-xs text-gray-400')
+                        )
+                        if self._edit_rule_id:
+                            n_c = len(self._get_conflict_ids())
+                            c_label = f'Conflictos ({n_c})' if n_c else 'Conflictos'
+                            self._btn_footer_conflicts = (
+                                ui.button(c_label, on_click=lambda: self._toggle_footer_tab('conflicts'))
+                                .props('flat dense no-caps size=sm')
+                                .classes('text-xs text-yellow-400' if n_c else 'text-xs text-gray-400')
+                            )
+                            if n_c:
+                                ui.icon('warning_amber', size='14px').classes('text-yellow-500')
+                        ui.element('div').classes('flex-1')
                         ui.button('Cancel', on_click=lambda: [self.dialog.close(), self._clear_state()]).props('flat color=white size=sm')
                         ui.button('Validate', on_click=self._validate, icon='check_circle').props('flat color=blue size=sm').classes('text-white')
                         self._save_btn = ui.button('Save', on_click=self._save, icon='save').props('flat color=green size=sm').classes('text-white')
@@ -331,6 +344,83 @@ class MappingEditorDialog:
         if self._response_json_data:
             return self._response_json_data
         return self._response_editor.properties.get('content', {}).get('json', {}) if self._response_editor else {}
+
+    # ── Footer tabs ────────────────────────────────────────────────────────
+
+    def _get_conflict_ids(self) -> list:
+        """Rule IDs that conflict with the mapping being edited."""
+        if not self._edit_rule_id:
+            return []
+        file_info = self.ui.mapping_loader.file_info
+        if not file_info:
+            return []
+        if hasattr(self.ui, 'mappings_view') and self.ui.mappings_view._conflict_cache:
+            pairs = self.ui.mappings_view._conflict_cache['pairs']
+        else:
+            from views.mappings import detect_conflicts
+            pairs = detect_conflicts(file_info)
+        result = []
+        for a, b in pairs:
+            if a == self._edit_rule_id and b not in result:
+                result.append(b)
+            elif b == self._edit_rule_id and a not in result:
+                result.append(a)
+        return result
+
+    def _toggle_footer_tab(self, tab: str):
+        if self._active_footer_tab == tab:
+            self._active_footer_tab = None
+            self._footer_panel.style('display:none;')
+        else:
+            self._active_footer_tab = tab
+            self._footer_panel.style('display:flex;')
+            if tab == 'info':
+                self._footer_info_content.style('display:flex;')
+                self._footer_conflicts_content.style('display:none;')
+            else:
+                self._footer_info_content.style('display:none;')
+                self._footer_conflicts_content.style('display:flex;')
+                self._render_footer_conflicts()
+        self._update_footer_tab_styles()
+
+    def _update_footer_tab_styles(self):
+        if self._btn_footer_info:
+            if self._active_footer_tab == 'info':
+                self._btn_footer_info.classes('text-white', remove='text-gray-400')
+            else:
+                self._btn_footer_info.classes('text-gray-400', remove='text-white')
+        if self._btn_footer_conflicts:
+            n_c = len(self._get_conflict_ids())
+            if self._active_footer_tab == 'conflicts':
+                self._btn_footer_conflicts.classes('text-white', remove='text-yellow-400 text-gray-400')
+            else:
+                color = 'text-yellow-400' if n_c else 'text-gray-400'
+                self._btn_footer_conflicts.classes(color, remove='text-white text-yellow-400 text-gray-400')
+
+    def _render_footer_conflicts(self):
+        if not self._footer_conflicts_container:
+            return
+        self._footer_conflicts_container.clear()
+        with self._footer_conflicts_container:
+            conflict_ids = self._get_conflict_ids()
+            if not conflict_ids:
+                ui.label('Sin conflictos detectados para este mapping.').classes('text-xs text-gray-400 italic py-1')
+                return
+            file_info = self.ui.mapping_loader.file_info
+            for rid in conflict_ids:
+                info = file_info.get(rid, {})
+                req = info.get('request', {})
+                filename = info.get('request_file', rid)
+                url_val = (req.get('urlPattern') or req.get('urlPathPattern')
+                           or req.get('urlPath') or req.get('url') or '')
+                method = req.get('method', '')
+                with ui.row().classes('w-full items-start gap-2 py-0.5'):
+                    ui.icon('warning_amber', size='13px').classes('text-yellow-500 shrink-0 mt-0.5')
+                    with ui.column().classes('gap-0 flex-1 min-w-0'):
+                        ui.label(filename).classes('text-xs text-gray-300 font-mono')
+                        if url_val:
+                            method_str = f'[{method}] ' if method and method not in ('ANY', '') else ''
+                            ui.label(f'{method_str}{url_val}').classes('text-xs text-yellow-300/80 font-mono break-all')
 
     # ── Help dialog ────────────────────────────────────────────────────────
 
@@ -602,4 +692,11 @@ class MappingEditorDialog:
         self._original_body_filename = None
         self._request_json_data = {}
         self._response_json_data = {}
+        self._active_footer_tab = None
+        self._footer_panel = None
+        self._footer_info_content = None
+        self._footer_conflicts_content = None
+        self._footer_conflicts_container = None
+        self._btn_footer_info = None
+        self._btn_footer_conflicts = None
 
