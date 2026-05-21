@@ -121,6 +121,7 @@ class MappingLoader:
 
         try:
             rule = strategy.load_mapping(mapping)
+            rule.source_file = mapping_filename
             request = mapping.get("request", {})
             response = mapping.get("response", {})
             mt_lower = mapping_type.lower()

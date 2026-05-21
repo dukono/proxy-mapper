@@ -461,7 +461,7 @@ class EditRepeatDialog:
                         with ui.tab_panel('Raw').classes('p-0 panel-scrollable'):
                             state['resp_raw'] = ui.column().classes('w-full h-full')
                             with state['resp_raw']:
-                                ui.label('Pulsa Send para ver el raw HTTP aquí') \
+                                ui.label('Press Send to view raw HTTP here') \
                                     .classes('text-gray-600 text-xs italic p-4')
 
         async def _fire_send(_=None):
@@ -474,9 +474,9 @@ class EditRepeatDialog:
     def _render_empty_response(self):
         with ui.column().classes('w-full h-full items-center justify-center gap-3'):
             ui.icon('send', size='40px').classes('text-gray-700')
-            ui.label('Pulsa Send para ver la respuesta aquí') \
+            ui.label('Press Send to see the response here') \
                 .classes('text-gray-500 text-sm')
-            ui.label('Los resultados aparecerán en RAW y JSON') \
+            ui.label('Results will appear in RAW and JSON tabs') \
                 .classes('text-gray-600 text-xs')
 
     # ── kv editor ───────────────────────────────���────────────────────────────
@@ -532,14 +532,18 @@ class EditRepeatDialog:
                 ):
                     ui.element('div').classes('w-6 shrink-0')
 
-                    def _add_key(e):
-                        if e.value.strip():
-                            items.append({'enabled': True, 'key': e.value.strip(), 'value': ''})
-                            refresh()
-
-                    ui.input(placeholder='＋ New key…', on_change=_add_key) \
+                    add_key_inp = ui.input(placeholder='＋ New key…') \
                         .classes('w-40 shrink-0 text-xs font-mono text-gray-500 italic') \
                         .props(props_inp)
+
+                    def _on_add_key_enter(e, _inp=add_key_inp):
+                        if isinstance(e.args, dict) and e.args.get('key') == 'Enter':
+                            val = _inp.value.strip()
+                            if val:
+                                items.append({'enabled': True, 'key': val, 'value': ''})
+                                refresh()
+
+                    add_key_inp.on('keydown', _on_add_key_enter)
                     ui.label('← type here to add a new field') \
                         .classes('flex-1 text-xs text-gray-600 italic')
 
@@ -559,7 +563,7 @@ class EditRepeatDialog:
 
         lbl = state['resp_status']
         if lbl:
-            lbl.set_text('Enviando…')
+            lbl.set_text('Sending…')
             lbl.classes('text-gray-500',
                         remove='text-green-400 text-yellow-400 text-orange-400 text-red-400')
         if state['resp_meta']:
@@ -643,14 +647,14 @@ class EditRepeatDialog:
                 # Make badge clickable if we have a file to edit and a ui_instance
                 can_edit = bool(proxy_file and self._ui_instance)
 
-                lbl = state['resp_badge_label']
-                lbl.set_text(badge_text)
-                lbl.classes(
+                badge_lbl = state['resp_badge_label']
+                badge_lbl.set_text(badge_text)
+                badge_lbl.classes(
                     f'{badge_color} {hover_color} {"cursor-pointer" if can_edit else ""}',
                     remove='text-purple-300 text-blue-300 cursor-pointer '
                            'hover:bg-purple-700/60 hover:bg-blue-700/60'
                 )
-                lbl.tooltip(tooltip_text)
+                badge_lbl.tooltip(tooltip_text)
 
                 if can_edit:
                     def _open_mapping_editor(pf=proxy_file, pi=self._ui_instance):
@@ -674,13 +678,13 @@ class EditRepeatDialog:
                             from dialogs.mapping_editor import MappingEditorDialog
                             MappingEditorDialog(pi).show_edit('', mapping_data)
                         except Exception as exc:
-                            ui.notify(f'Error abriendo mapping: {exc}', type='negative')
+                            ui.notify(f'Error opening mapping: {exc}', type='negative')
 
                     state['_badge_click_handler'] = _open_mapping_editor
-                    lbl.props(remove='disable')
+                    badge_lbl.props(remove='disable')
                 else:
                     state['_badge_click_handler'] = None
-                    lbl.props('disable')
+                    badge_lbl.props('disable')
 
                 # Filename label next to badge
                 if proxy_file:
@@ -729,17 +733,17 @@ class EditRepeatDialog:
                             else:
                                 with ui.column().classes('w-full h-full items-center justify-center gap-3 p-4'):
                                     ui.icon('warning_amber', size='32px').classes('text-yellow-600')
-                                    ui.label('La respuesta no es JSON válido') \
+                                    ui.label('Response is not valid JSON') \
                                         .classes('text-gray-400 text-sm')
-                                    ui.label('Usa la pestaña RAW para ver el contenido') \
+                                    ui.label('Use the RAW tab to view content') \
                                         .classes('text-gray-600 text-xs')
 
             if state['resp_hdrs']:
                 state['resp_hdrs'].clear()
                 with state['resp_hdrs']:
                     with ui.row().classes('w-full px-3 py-1 bg-gray-800/60 border-b border-gray-700 items-center'):
-                        ui.label('Cabecera').classes('w-48 shrink-0 text-xs font-bold text-gray-500')
-                        ui.label('Valor').classes('flex-1 text-xs font-bold text-gray-500')
+                        ui.label('Header').classes('w-48 shrink-0 text-xs font-bold text-gray-500')
+                        ui.label('Value').classes('flex-1 text-xs font-bold text-gray-500')
                     for k, v in resp_headers:
                         with ui.row().classes('w-full px-3 py-1 border-b border-gray-700/50 items-start hover:bg-gray-800/40'):
                             ui.label(k).classes('w-48 shrink-0 text-xs text-blue-400 font-mono')
@@ -762,15 +766,16 @@ class EditRepeatDialog:
                     )
 
         except Exception as exc:
-            if lbl:
-                lbl.set_text('Error')
-                lbl.classes('text-red-400', remove='text-gray-500')
+            status_lbl = state['resp_status']
+            if status_lbl:
+                status_lbl.set_text('Error')
+                status_lbl.classes('text-red-400', remove='text-gray-500')
             if state['resp_body']:
                 state['resp_body'].clear()
                 with state['resp_body']:
                     with ui.column().classes('w-full p-6 gap-3 items-center'):
                         ui.icon('error_outline', size='36px').classes('text-red-500')
-                        ui.label('Error al realizar la petición') \
+                        ui.label('Request failed') \
                             .classes('text-red-400 text-sm font-semibold')
                         ui.label(str(exc)).classes('text-red-300 text-xs font-mono break-all text-center')
 

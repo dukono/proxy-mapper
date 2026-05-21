@@ -31,7 +31,23 @@
       "mapping_type": "Wire",
       "service_url": "http://localhost:31310",
       "mappings_path": "/home/vitalyneborachok/IdeaProjects/wsc-geret/code/src/test/resources/compose/trafficparrot_mappings"
+    },
+    {
+      "name": "WSCGERET",
+      "root_path": "/home/vitalyneborachok/IdeaProjects/wsc-geret/code/src/test/resources/compose",
+      "description": "",
+      "mapping_type": "Wire",
+      "service_url": "http://localhost:31310",
+      "mappings_path": "/home/vitalyneborachok/IdeaProjects/wsc-geret/code/src/test/resources/compose/trafficparrot_mappings"
+    },
+    {
+      "name": "wscgeretKarate",
+      "root_path": "/home/vitalyneborachok/IdeaProjects/wsc-geret/e2e/karate/src/test/resources/compose",
+      "description": "",
+      "mapping_type": "Wire",
+      "service_url": "http://localhost:31310",
+      "mappings_path": "/home/vitalyneborachok/IdeaProjects/wsc-geret/e2e/karate/src/test/resources/compose/trafficparrot_mappings"
     }
   ],
-  "current_profile": "test"
+  "current_profile": "wscgeretKarate"
 }

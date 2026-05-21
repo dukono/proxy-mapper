@@ -115,11 +115,19 @@ class MonitorView:
 
         # Update counter
         if self._counter_label:
-            total    = len(self.ui.traffic)
-            shown    = len(filtered)
-            label    = f"{shown}" if shown == total else f"{shown}/{total}"
+            total = len(self.ui.traffic)
+            shown = len(filtered)
+            if shown > 500:
+                label = f"500/{total} ▲"
+                color = 'orange-8'
+            elif shown == total:
+                label = f"{shown}"
+                color = 'grey-7'
+            else:
+                label = f"{shown}/{total}"
+                color = 'blue-8'
             self._counter_label.set_text(label)
-            self._counter_label.props(f"color={'grey-7' if shown == total else 'blue-8'} rounded")
+            self._counter_label.props(f"color={color} rounded")
 
     def _on_select(self, entry):
         self.ui.select_entry(entry)

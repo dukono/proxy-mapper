@@ -176,6 +176,20 @@ class MappingsView:
             count = self._render_flat_nodes(tree_data)
             self._update_match_count(count)
 
+    def _has_matches(self, items: list) -> bool:
+        """Return True if any descendant matches the current search text."""
+        for item in items:
+            if item['type'] == 'directory':
+                if self._has_matches(item.get('children', [])):
+                    return True
+            elif item['type'] == 'mapping':
+                if self._matches(item.get('label'), item.get('url'), item.get('mapping_id')):
+                    return True
+            else:
+                if self._matches(item.get('label')):
+                    return True
+        return False
+
     def _render_flat_nodes(self, items: list, level: int = 0, parent_lines: list = None) -> int:
         if parent_lines is None:
             parent_lines = []
@@ -187,7 +201,8 @@ class MappingsView:
                 prefix += '└── ' if is_last else '├── '
 
             if item['type'] == 'directory':
-                # Always show directories when searching (children may match)
+                if self._search_text and not self._has_matches(item.get('children', [])):
+                    continue
                 with ui.row().classes('w-full py-1.5 px-2 bg-gray-800/40 border-b border-gray-700/30 items-center'):
                     ui.label(prefix).classes('text-xs text-gray-600 font-mono whitespace-pre')
                     ui.icon('folder', size='16px').classes('text-yellow-500 mr-1')

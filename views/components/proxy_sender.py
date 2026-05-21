@@ -34,10 +34,9 @@ def send_via_proxy(method: str, url: str, headers: dict, body, on_done=None):
             )
             if on_done:
                 on_done(resp)
-            else:
-                ui.notify(f"{method} → {resp.status_code}", type='positive')
         except Exception as exc:
-            ui.notify(f"Request failed: {exc}", type='negative')
+            if on_done:
+                on_done(exc)
 
     threading.Thread(target=_run, daemon=True).start()
 

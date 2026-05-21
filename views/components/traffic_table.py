@@ -299,7 +299,7 @@ class TrafficTable:
             if self._current_idx < 0:
                 return
 
-        new_idx = max(0, min(len(self._entries) - 1, self._current_idx + direction))
+        new_idx = max(0, min(len(self._rows_cache) - 1, self._current_idx + direction))
         if new_idx == self._current_idx:
             return
 

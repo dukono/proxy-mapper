@@ -28,7 +28,7 @@ class DefaultStrategy(MappingStrategy):
         conditions = []
 
         # ── URL matching against full URL (host included) ─────────────────────
-        match_type = request.get('matchType', 'contains')
+        match_type = request.get('matchType', 'contains').lower()
         match_value = request.get('matchValue', '')
 
         if match_value:
@@ -40,9 +40,9 @@ class DefaultStrategy(MappingStrategy):
                 conditions.append(MatchCondition('url', MatchType.REGEX, match_value))
             elif match_type == 'wildcard':
                 conditions.append(MatchCondition('url', MatchType.WILDCARD, match_value))
-            elif match_type == 'startsWith':
+            elif match_type == 'startswith':
                 conditions.append(MatchCondition('url', MatchType.STARTS_WITH, match_value))
-            elif match_type == 'endsWith':
+            elif match_type == 'endswith':
                 conditions.append(MatchCondition('url', MatchType.ENDS_WITH, match_value))
 
         # ── Method matching ───────────────────────────────────────────────────
@@ -103,8 +103,8 @@ class DefaultStrategy(MappingStrategy):
         if not match_value:
             errors.append("Request needs 'matchValue' for URL matching")
 
-        match_type = request.get('matchType', 'contains')
-        valid_types = ['contains', 'equal', 'regexp', 'wildcard', 'startsWith', 'endsWith']
+        match_type = request.get('matchType', 'contains').lower()
+        valid_types = ['contains', 'equal', 'regexp', 'wildcard', 'startswith', 'endswith']
         if match_type not in valid_types:
             errors.append(f"Invalid matchType '{match_type}'. Must be one of: {valid_types}")
 

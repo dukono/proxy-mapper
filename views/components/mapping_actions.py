@@ -93,6 +93,7 @@ class MappingActions:
     def _confirm_delete(self, mapping_id: str, dialog):
         file_info = self._ui.mapping_loader.get_info(mapping_id)
         if file_info:
+            self._ui.mapping_loader.unregister(mapping_id)
             mappings_dir = self._ui.config.get_mappings_dir()
             for key in ('request_file', 'response_file'):
                 rel = file_info.get(key)
@@ -100,7 +101,6 @@ class MappingActions:
                     full = os.path.join(mappings_dir, rel)
                     if os.path.exists(full):
                         os.remove(full)
-            self._ui.mapping_loader.unregister(mapping_id)
             ui.notify("Mapping deleted successfully", type='positive')
         dialog.close()
         self._refresh()

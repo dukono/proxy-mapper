@@ -316,6 +316,19 @@ class ProfileManagerDialog:
             ui.notify("Cannot delete the last active profile", type='negative')
             return
 
+        was_active = config.current_profile == name
         config.remove_profile(name)
         ui.notify(f"Deleted profile: {name}", type='positive')
         self._render_profiles_list(config)
+
+        if was_active:
+            new_profile = config.current_profile
+            if hasattr(self.ui, 'profile_select'):
+                options = [p.name for p in config.profiles]
+                self.ui.profile_select.set_options(options, value=new_profile)
+            if hasattr(self.ui, '_auto_load_mappings'):
+                from config.globals import set_mappings_loaded
+                set_mappings_loaded(False)
+                self.ui._auto_load_mappings()
+            if hasattr(self.ui, 'mappings_view') and hasattr(self.ui.mappings_view, 'refresh'):
+                self.ui.mappings_view.refresh()

@@ -57,6 +57,7 @@ class MappingEditorDialog:
         self._response_filename_input: Optional[ui.input] = None
         self._request_editor = None
         self._response_editor = None
+        self._save_btn = None
         self._edit_mode = False
         self._edit_rule_id: Optional[str] = None
         self._original_mapping_filename: Optional[str] = None
@@ -287,7 +288,7 @@ class MappingEditorDialog:
                     with ui.row().classes('items-center gap-2'):
                         ui.button('Cancel', on_click=lambda: [self.dialog.close(), self._clear_state()]).props('flat color=white size=sm')
                         ui.button('Validate', on_click=self._validate, icon='check_circle').props('flat color=blue size=sm').classes('text-white')
-                        ui.button('Save', on_click=self._save, icon='save').props('flat color=green size=sm').classes('text-white')
+                        self._save_btn = ui.button('Save', on_click=self._save, icon='save').props('flat color=green size=sm').classes('text-white')
 
         self.dialog.open()
 
@@ -296,20 +297,34 @@ class MappingEditorDialog:
     def _on_request_change(self, e):
         try:
             content = e.content if hasattr(e, 'content') else e.get('content', {})
-            self._request_json_data = content.get('json', self._request_json_data)
+            if 'json' in content:
+                self._request_json_data = content['json']
+            elif 'text' in content:
+                try:
+                    self._request_json_data = json.loads(content['text'])
+                except Exception:
+                    pass  # keep last valid JSON
         except Exception:
             pass
 
     def _on_response_change(self, e):
         try:
             content = e.content if hasattr(e, 'content') else e.get('content', {})
-            self._response_json_data = content.get('json', self._response_json_data)
+            if 'json' in content:
+                self._response_json_data = content['json']
+            elif 'text' in content:
+                try:
+                    self._response_json_data = json.loads(content['text'])
+                except Exception:
+                    pass  # keep last valid JSON
         except Exception:
             pass
 
     def _get_request_json(self) -> dict:
         if self._request_json_data:
             return self._request_json_data
+        if self._request_editor is None:
+            return {}
         return self._request_editor.properties.get('content', {}).get('json', {})
 
     def _get_response_json(self) -> dict:
@@ -476,6 +491,9 @@ class MappingEditorDialog:
             return False
 
     def _save(self):
+        save_btn = self._save_btn
+        if save_btn:
+            save_btn.props('loading')
         try:
             if not self._validate():
                 return
@@ -512,12 +530,17 @@ class MappingEditorDialog:
             saved_files = []
 
             old_mapping = self._original_mapping_filename
-            mapping_path = os.path.join(mappings_dir, mapping_filename)
+            mapping_path = os.path.normpath(os.path.join(mappings_dir, mapping_filename))
+            if not mapping_path.startswith(os.path.normpath(mappings_dir) + os.sep):
+                ui.notify("⚠️ Invalid filename: path traversal not allowed", type='negative')
+                return
             os.makedirs(os.path.dirname(mapping_path), exist_ok=True)
 
             if self._edit_mode and old_mapping and old_mapping != mapping_filename:
                 old_path = os.path.join(mappings_dir, old_mapping)
                 if os.path.exists(old_path):
+                    if os.path.exists(mapping_path):
+                        ui.notify(f"⚠️ '{mapping_filename}' already exists and will be overwritten", type='warning')
                     os.rename(old_path, mapping_path)
                     saved_files.append(f"mappings/{mapping_filename} (renamed)")
                 else:
@@ -562,6 +585,9 @@ class MappingEditorDialog:
         except Exception as e:
             log.error("Save error: %s", e, exc_info=True)
             ui.notify(f"❌ Error saving: {e}", type='negative')
+        finally:
+            if save_btn:
+                save_btn.props(remove='loading')
 
     def _clear_state(self):
         self._edit_mode = False
@@ -571,6 +597,7 @@ class MappingEditorDialog:
         self._response_filename_input = None
         self._request_editor = None
         self._response_editor = None
+        self._save_btn = None
         self._original_mapping_filename = None
         self._original_body_filename = None
         self._request_json_data = {}

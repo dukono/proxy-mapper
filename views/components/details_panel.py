@@ -115,7 +115,9 @@ class DetailsPanel:
                 _copy_btn(original_url)
 
             with ui.element('div').classes('flex flex-1 min-h-0'):
-                panels = _vertical_tabs(['Header', 'Query', 'Body'], ['Hdr', 'Qry', 'Bdy'])
+                qry_count = len(entry.request.query_params) if entry.request.query_params else 0
+                qry_label = f'Q{qry_count}' if qry_count else 'Qry'
+                panels = _vertical_tabs(['Header', 'Query', 'Body'], ['Hdr', qry_label, 'Bdy'])
                 with panels:
                     with ui.tab_panel('Header').classes('p-0 h-full'):
                         with ui.scroll_area().classes('w-full h-full'):
@@ -157,7 +159,9 @@ class DetailsPanel:
                             .style('background:rgba(168,85,247,0.2); color:#c084fc; padding:1px 8px; border-radius:4px; border:1px solid rgba(168,85,247,0.4);') \
                             .tooltip('Edit mapping')
                 else:
-                    ui.label("Pending…").classes('text-xs text-gray-600 italic flex-1')
+                    with ui.row().classes('items-center gap-2 flex-1'):
+                        ui.html('<span style="display:inline-block;width:10px;height:10px;border-radius:50%;border:2px solid #60a5fa;border-top-color:transparent;animation:spin .8s linear infinite;"></span>')
+                        ui.label("Waiting for response…").classes('text-xs text-gray-500 italic')
 
             with ui.element('div').classes('flex flex-1 min-h-0'):
                 panels = _vertical_tabs(['Header', 'Body'], ['Hdr', 'Bdy'])

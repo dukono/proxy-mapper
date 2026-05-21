@@ -38,7 +38,7 @@ def matches_entry(entry, filter_text: str, field: str, match_type: str) -> bool:
             parts += [h.name for h in entry.response.headers] + [h.value for h in entry.response.headers]
             if entry.response.content:
                 parts.append(entry.response.content)
-        return apply_match(' '.join(parts), filter_text, 'Contains')
+        return apply_match(' '.join(parts), filter_text, match_type)
 
     if field == 'URL':
         return apply_match(entry.original_url or entry.request.url, filter_text, match_type)

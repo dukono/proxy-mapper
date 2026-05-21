@@ -339,9 +339,15 @@ class CertSettingsDialog:
         self._output_label.set_text(text)
         self._output_label.classes(f'text-xs whitespace-pre-wrap font-mono {color}', remove='text-gray-300 text-green-400 text-red-400 text-yellow-400')
 
-    def _copy_to_clipboard(self, text: str):
-        ui.run_javascript(f'navigator.clipboard.writeText({repr(text)})')
-        ui.notify(f'Copied: {text}', type='positive')
+    async def _copy_to_clipboard(self, text: str):
+        import json as _json
+        encoded = _json.dumps(text)
+        js = ("(function(){var t=" + encoded + ";var el=document.createElement('textarea');"
+              "el.value=t;el.style.position='fixed';el.style.top='0';el.style.left='0';"
+              "el.style.opacity='0';document.body.appendChild(el);el.focus();el.select();"
+              "document.execCommand('copy');document.body.removeChild(el);})()")
+        await ui.run_javascript(js)
+        ui.notify('Copied!', type='positive')
 
     def _open_folder(self, path: str):
         try:
